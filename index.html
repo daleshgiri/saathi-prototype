@@ -1,0 +1,934 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Saathi Digital RM Prototype</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Hind:wght@400;500;600;700&display=swap" rel="stylesheet">
+<!--
+  Saathi: Digital RM for connectors
+  Concept prototype for FAME 6.0 (Problem Statement 4). Not an official bank app.
+  All data is dummy data. Single file: HTML + CSS + JS, no build step.
+
+  For the tech team, where to extend:
+  - DATA (LEADS, BOARD, NOTIFS): replace with API calls to the connector app backend.
+  - replyFor(): scripted intent matching. Swap for an LLM call with guardrails.
+  - micDemo(): simulated voice input. Plug in a speech-to-text service (e.g. Bhashini, Google STT).
+  - speak(): uses the browser's speechSynthesis. Swap for a TTS service for better Hindi voices.
+-->
+<style>
+:root{
+  --maroon:#8E1B2C; --red:#B3263A; --red-soft:#F8E6E8; --cream:#FBF6F2; --ink:#2A1A1E;
+  --muted:#7A6A6E; --line:#EFE3DE; --card:#FFFFFF; --gold:#C8902E; --gold-soft:#FBF1DE;
+  --green:#1E8E5A; --green-soft:#E3F4EB; --amber:#C77A0A; --amber-soft:#FDF0DC;
+  --blue:#2F6FB3; --blue-soft:#E4EEF8; --shadow:0 2px 10px rgba(80,20,30,.07);
+}
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+html,body{height:100%}
+body{font-family:'Inter','Hind',system-ui,sans-serif;background:#E9DFDA;color:var(--ink);
+  display:flex;align-items:center;justify-content:center;gap:40px;min-height:100vh;padding:24px}
+button{font-family:inherit;cursor:pointer;border:0;background:none;color:inherit}
+input{font-family:inherit}
+.hi{font-family:'Hind','Inter',sans-serif}
+
+/* Presenter panel */
+.presenter{width:300px;background:#fff;border-radius:20px;padding:22px;box-shadow:0 10px 40px rgba(60,20,30,.12);
+  max-height:844px;overflow:auto}
+.presenter .tag{display:inline-block;font-size:11px;font-weight:600;color:var(--maroon);background:var(--red-soft);
+  padding:4px 8px;border-radius:6px;margin-bottom:10px}
+.presenter h1{font-size:20px;line-height:1.25;margin-bottom:6px}
+.presenter p{font-size:13px;color:var(--muted);line-height:1.5;margin-bottom:14px}
+.presenter .scene{display:flex;gap:10px;align-items:flex-start;width:100%;text-align:left;padding:10px;border-radius:12px;
+  border:1px solid var(--line);margin-bottom:8px;transition:.15s}
+.presenter .scene:hover{border-color:var(--red);background:#FFF9F8}
+.presenter .scene b{display:flex;align-items:center;justify-content:center;flex:0 0 24px;height:24px;border-radius:50%;
+  background:var(--maroon);color:#fff;font-size:12px}
+.presenter .scene span{font-size:13px;line-height:1.35}
+.presenter .scene small{display:block;color:var(--muted);font-size:11.5px;margin-top:2px}
+.presenter .row{display:flex;gap:8px;margin-top:12px}
+.presenter .row button{flex:1;padding:9px;border-radius:10px;border:1px solid var(--line);font-size:12.5px;font-weight:600}
+.presenter .hint{font-size:11.5px;color:var(--muted);margin-top:12px}
+
+/* Device */
+.device{width:390px;height:844px;border-radius:52px;border:12px solid #1E1517;background:var(--cream);
+  position:relative;overflow:hidden;box-shadow:0 30px 60px rgba(40,10,20,.25);flex:0 0 auto}
+.status{height:44px;display:flex;align-items:center;justify-content:space-between;padding:0 26px 0 30px;font-size:14px;font-weight:600;
+  position:relative;z-index:5}
+.status .notch{position:absolute;left:50%;top:8px;transform:translateX(-50%);width:110px;height:28px;background:#1E1517;border-radius:20px}
+.status .icons{display:flex;gap:5px;align-items:center}
+.screens{position:absolute;top:44px;left:0;right:0;bottom:0}
+.screen{position:absolute;inset:0;overflow-y:auto;padding:4px 16px 100px;display:none;scrollbar-width:none}
+.screen::-webkit-scrollbar{display:none}
+.screen.active{display:block;animation:fade .2s ease}
+.screen.full{padding-bottom:24px}
+@keyframes fade{from{opacity:.4;transform:translateY(4px)}to{opacity:1;transform:none}}
+
+/* Bottom nav */
+.nav{position:absolute;bottom:0;left:0;right:0;height:80px;background:#fff;border-top:1px solid var(--line);
+  display:flex;align-items:flex-start;justify-content:space-around;padding-top:10px;z-index:6}
+.nav button{display:flex;flex-direction:column;align-items:center;gap:3px;font-size:11px;color:var(--muted);width:64px}
+.nav button.on{color:var(--red);font-weight:600}
+.nav .mic{width:62px;height:62px;border-radius:50%;background:linear-gradient(145deg,var(--red),var(--maroon));color:#fff;
+  margin-top:-26px;box-shadow:0 8px 20px rgba(142,27,44,.4);justify-content:center;border:4px solid #fff}
+.nav .mic svg{width:26px;height:26px}
+.nav.hide{display:none}
+
+/* Common */
+.top{display:flex;align-items:center;justify-content:space-between;padding:8px 0 14px}
+.who{display:flex;align-items:center;gap:10px}
+.avatar{width:42px;height:42px;border-radius:50%;background:var(--red-soft);color:var(--maroon);display:flex;align-items:center;
+  justify-content:center;font-weight:700;font-size:15px;flex:0 0 auto}
+.who h2{font-size:17px}
+.who p{font-size:12px;color:var(--muted)}
+.iconbtn{width:40px;height:40px;border-radius:50%;background:#fff;display:flex;align-items:center;justify-content:center;
+  box-shadow:var(--shadow);position:relative}
+.badge{position:absolute;top:4px;right:4px;min-width:17px;height:17px;padding:0 4px;border-radius:9px;background:var(--red);color:#fff;
+  font-size:10px;font-weight:700;display:flex;align-items:center;justify-content:center;border:2px solid #fff}
+.card{background:var(--card);border-radius:18px;padding:16px;box-shadow:var(--shadow);margin-bottom:14px}
+.sec{font-size:15px;font-weight:700;margin:20px 2px 10px;display:flex;justify-content:space-between;align-items:center}
+.sec a{font-size:12.5px;color:var(--red);font-weight:600;cursor:pointer}
+.pill{display:inline-flex;align-items:center;gap:4px;font-size:11px;font-weight:600;padding:3px 9px;border-radius:20px;white-space:nowrap}
+.p-green{background:var(--green-soft);color:var(--green)}
+.p-amber{background:var(--amber-soft);color:var(--amber)}
+.p-blue{background:var(--blue-soft);color:var(--blue)}
+.p-red{background:var(--red-soft);color:var(--red)}
+.p-gold{background:var(--gold-soft);color:var(--gold)}
+.p-grey{background:#F1ECEA;color:var(--muted)}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;padding:11px 16px;border-radius:12px;font-weight:600;font-size:13.5px}
+.btn-red{background:var(--red);color:#fff}
+.btn-ghost{background:var(--red-soft);color:var(--maroon)}
+.btn-white{background:#fff;color:var(--maroon)}
+.btn-line{border:1px solid var(--line);background:#fff}
+.btn-block{width:100%}
+.muted{color:var(--muted)}
+.small{font-size:12px}
+.back{display:flex;align-items:center;gap:8px;font-size:17px;font-weight:700;padding:8px 0 14px}
+.back button{width:36px;height:36px;border-radius:50%;background:#fff;box-shadow:var(--shadow);display:flex;align-items:center;justify-content:center}
+
+/* Home */
+.saathi{background:linear-gradient(150deg,#A82337 0%,#7A1626 100%);color:#fff;border-radius:22px;padding:18px;margin-bottom:14px;
+  position:relative;overflow:hidden}
+.saathi:after{content:"";position:absolute;right:-40px;top:-40px;width:160px;height:160px;border-radius:50%;background:rgba(255,255,255,.07)}
+.saathi .lbl{display:flex;align-items:center;gap:8px;font-size:12px;opacity:.9;margin-bottom:8px}
+.saathi .dot{width:26px;height:26px;border-radius:50%;background:rgba(255,255,255,.18);display:flex;align-items:center;justify-content:center}
+.saathi h3{font-size:18px;line-height:1.3;margin-bottom:12px}
+.saathi .op{background:rgba(255,255,255,.12);border-radius:12px;padding:10px 12px;font-size:13px;line-height:1.4;margin-bottom:8px;display:flex;gap:10px}
+.saathi .op b{font-weight:700}
+.saathi .acts{display:flex;gap:8px;margin-top:12px}
+.stats{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:14px}
+.stat{background:#fff;border-radius:16px;padding:12px;box-shadow:var(--shadow)}
+.stat small{font-size:11px;color:var(--muted)}
+.stat div{font-size:17px;font-weight:700;margin-top:3px}
+.tier .bar{height:10px;background:#F3E8E3;border-radius:6px;overflow:hidden;margin:10px 0 8px}
+.tier .bar i{display:block;height:100%;background:linear-gradient(90deg,#D9A441,var(--gold));border-radius:6px}
+.tier .head{display:flex;justify-content:space-between;align-items:center}
+.alert{display:flex;gap:12px;align-items:flex-start}
+.alert .ic{width:36px;height:36px;border-radius:10px;display:flex;align-items:center;justify-content:center;flex:0 0 auto}
+.alert h4{font-size:14px;margin-bottom:3px}
+.alert p{font-size:12.5px;color:var(--muted);line-height:1.45}
+.rm{display:flex;align-items:center;gap:12px}
+.rm .avatar{width:48px;height:48px;background:#E9EEF6;color:var(--blue)}
+.rm h4{font-size:14.5px}
+.rm p{font-size:12px;color:var(--muted)}
+.rm .call{margin-left:auto;display:flex;gap:8px}
+.grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
+.qa{background:#fff;border-radius:16px;padding:14px 8px;display:flex;flex-direction:column;align-items:center;gap:8px;font-size:12px;
+  font-weight:500;text-align:center;box-shadow:var(--shadow);line-height:1.25}
+.qa .ic{width:40px;height:40px;border-radius:12px;background:var(--red-soft);color:var(--maroon);display:flex;align-items:center;justify-content:center}
+.check li{list-style:none;display:flex;gap:10px;align-items:center;padding:9px 0;border-bottom:1px solid var(--line);font-size:13.5px}
+.check li:last-child{border:0}
+.check .tick{width:22px;height:22px;border-radius:50%;border:2px solid var(--line);display:flex;align-items:center;justify-content:center;flex:0 0 auto}
+.check .tick svg{opacity:0}
+.check .done .tick svg{opacity:1}
+.check .done .tick{background:var(--green);border-color:var(--green);color:#fff}
+.check .done span{color:var(--muted);text-decoration:line-through}
+.check li button{margin-left:auto}
+
+/* Chat */
+#chat{padding:0;display:none;flex-direction:column}
+#chat.active{display:flex}
+.chathead{display:flex;align-items:center;gap:10px;padding:8px 14px 12px;background:var(--cream);border-bottom:1px solid var(--line)}
+.chathead .avatar{background:linear-gradient(145deg,var(--red),var(--maroon));color:#fff}
+.chathead h3{font-size:15.5px}
+.chathead p{font-size:11.5px;color:var(--green);display:flex;align-items:center;gap:4px}
+.chathead p:before{content:"";width:7px;height:7px;border-radius:50%;background:var(--green)}
+.lang{margin-left:auto;display:flex;background:#fff;border-radius:20px;padding:3px;box-shadow:var(--shadow)}
+.lang button{padding:5px 10px;border-radius:16px;font-size:12.5px;font-weight:600;color:var(--muted)}
+.lang button.on{background:var(--red);color:#fff}
+.msgs{flex:1;overflow-y:auto;padding:14px;display:flex;flex-direction:column;gap:10px;scrollbar-width:none}
+.msgs::-webkit-scrollbar{display:none}
+.msg{max-width:82%;padding:10px 13px;border-radius:16px;font-size:14px;line-height:1.45;animation:pop .2s ease}
+@keyframes pop{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+.msg.bot{background:#fff;border-bottom-left-radius:4px;box-shadow:var(--shadow);align-self:flex-start}
+.msg.me{background:var(--red);color:#fff;border-bottom-right-radius:4px;align-self:flex-end}
+.msg .note{display:block;font-size:11px;color:var(--muted);margin-top:6px}
+.msg .opts{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px}
+.msg .opts button{padding:7px 11px;border-radius:16px;background:var(--red-soft);color:var(--maroon);font-size:12.5px;font-weight:600}
+.mini{background:var(--cream);border-radius:12px;padding:10px 12px;margin-top:10px;font-size:12.5px}
+.mini .r{display:flex;justify-content:space-between;padding:3px 0}
+.mini .r.t{border-top:1px dashed #E2D3CC;margin-top:4px;padding-top:7px;font-weight:700}
+.typing{display:flex;gap:4px;padding:12px 14px}
+.typing i{width:7px;height:7px;border-radius:50%;background:#C9B5AF;animation:blink 1s infinite}
+.typing i:nth-child(2){animation-delay:.15s}.typing i:nth-child(3){animation-delay:.3s}
+@keyframes blink{0%,100%{opacity:.3}50%{opacity:1}}
+.chips{display:flex;gap:8px;overflow-x:auto;padding:4px 14px 10px;scrollbar-width:none}
+.chips::-webkit-scrollbar{display:none}
+.chips button{flex:0 0 auto;padding:8px 12px;border-radius:18px;background:#fff;border:1px solid var(--line);font-size:12.5px;font-weight:500}
+.inputbar{display:flex;gap:8px;align-items:center;padding:8px 12px 18px;background:var(--cream)}
+.inputbar input{flex:1;height:46px;border-radius:24px;border:1px solid var(--line);padding:0 16px;font-size:14px;background:#fff;outline:none}
+.inputbar .send{width:46px;height:46px;border-radius:50%;background:#fff;box-shadow:var(--shadow);display:flex;align-items:center;justify-content:center;color:var(--maroon)}
+.inputbar .bigmic{width:52px;height:52px;border-radius:50%;background:linear-gradient(145deg,var(--red),var(--maroon));color:#fff;display:flex;
+  align-items:center;justify-content:center;box-shadow:0 6px 14px rgba(142,27,44,.35)}
+.listen{position:absolute;inset:0;background:rgba(42,26,30,.55);display:none;align-items:flex-end;z-index:20}
+.listen.on{display:flex}
+.listen .sheet{background:#fff;width:100%;border-radius:26px 26px 0 0;padding:26px 20px 34px;text-align:center}
+.wave{display:flex;gap:5px;justify-content:center;align-items:center;height:56px;margin:8px 0 14px}
+.wave i{width:6px;border-radius:4px;background:var(--red);animation:wv .9s ease-in-out infinite}
+.wave i:nth-child(1){animation-delay:0s}.wave i:nth-child(2){animation-delay:.1s}.wave i:nth-child(3){animation-delay:.2s}
+.wave i:nth-child(4){animation-delay:.3s}.wave i:nth-child(5){animation-delay:.2s}.wave i:nth-child(6){animation-delay:.1s}.wave i:nth-child(7){animation-delay:0s}
+@keyframes wv{0%,100%{height:10px}50%{height:50px}}
+.listen .heard{font-size:17px;font-weight:600;min-height:26px}
+
+/* Leads */
+.tabs{display:flex;gap:8px;overflow-x:auto;margin-bottom:14px;scrollbar-width:none}
+.tabs::-webkit-scrollbar{display:none}
+.tabs button{flex:0 0 auto;padding:8px 14px;border-radius:18px;background:#fff;font-size:12.5px;font-weight:600;color:var(--muted);box-shadow:var(--shadow)}
+.tabs button.on{background:var(--ink);color:#fff}
+.lead{display:flex;gap:12px;align-items:center;cursor:pointer}
+.lead .avatar{width:44px;height:44px;font-size:14px}
+.lead h4{font-size:14.5px}
+.lead p{font-size:12px;color:var(--muted);margin-top:2px}
+.lead .right{margin-left:auto;text-align:right}
+.lead .right div{font-size:13px;font-weight:700;margin-top:5px}
+.timeline{position:relative;margin:6px 0 4px}
+.step{display:flex;gap:12px;position:relative;padding-bottom:18px}
+.step:last-child{padding-bottom:0}
+.step:before{content:"";position:absolute;left:11px;top:24px;bottom:0;width:2px;background:var(--line)}
+.step:last-child:before{display:none}
+.step .dotc{width:24px;height:24px;border-radius:50%;border:2px solid var(--line);background:#fff;display:flex;align-items:center;justify-content:center;flex:0 0 auto;z-index:1}
+.step.done .dotc{background:var(--green);border-color:var(--green);color:#fff}
+.step.done:before{background:var(--green)}
+.step.now .dotc{border-color:var(--amber);background:var(--amber-soft)}
+.step.now .dotc:after{content:"";width:8px;height:8px;border-radius:50%;background:var(--amber)}
+.step.fail .dotc{background:var(--red);border-color:var(--red);color:#fff}
+.step h5{font-size:13.5px}
+.step p{font-size:12px;color:var(--muted);margin-top:2px;line-height:1.4}
+.empty{text-align:center;padding:30px 20px}
+.empty .ic{width:64px;height:64px;border-radius:20px;background:var(--red-soft);color:var(--maroon);display:flex;align-items:center;justify-content:center;margin:0 auto 14px}
+.empty h4{font-size:16px;margin-bottom:6px}
+.empty p{font-size:13px;color:var(--muted);line-height:1.5;margin-bottom:16px}
+
+/* Earnings */
+.earnhero{background:linear-gradient(150deg,#2E1C21,#4A2A31);color:#fff;border-radius:22px;padding:18px;margin-bottom:14px}
+.earnhero small{opacity:.75;font-size:12px}
+.earnhero .big{font-size:30px;font-weight:800;margin:4px 0 12px}
+.earnhero .split{display:flex;gap:10px}
+.earnhero .split div{flex:1;background:rgba(255,255,255,.09);border-radius:12px;padding:10px}
+.earnhero .split b{display:block;font-size:15px;margin-top:3px}
+.next{display:flex;align-items:center;gap:12px}
+.next .ic{width:42px;height:42px;border-radius:12px;background:var(--green-soft);color:var(--green);display:flex;align-items:center;justify-content:center}
+.bars{display:flex;align-items:flex-end;gap:10px;height:110px;padding-top:10px}
+.bars div{flex:1;display:flex;flex-direction:column;align-items:center;gap:6px;height:100%;justify-content:flex-end}
+.bars i{width:100%;background:#E9D6D1;border-radius:6px 6px 3px 3px;display:block}
+.bars div.cur i{background:var(--red)}
+.bars span{font-size:10.5px;color:var(--muted)}
+.erow{display:flex;align-items:center;gap:12px;padding:11px 0;border-bottom:1px solid var(--line)}
+.erow:last-child{border:0}
+.erow h5{font-size:13.5px}
+.erow p{font-size:11.5px;color:var(--muted);margin-top:2px}
+.erow .amt{margin-left:auto;text-align:right;font-weight:700;font-size:13.5px}
+
+/* Opportunities */
+.opp .tagline{display:flex;gap:6px;margin-bottom:8px}
+.opp h4{font-size:15px;margin-bottom:5px;line-height:1.35}
+.opp p{font-size:12.5px;color:var(--muted);line-height:1.5}
+.opp .acts{display:flex;gap:8px;margin-top:12px}
+.consent{display:flex;gap:10px;align-items:flex-start;font-size:12px;color:var(--muted);line-height:1.45;background:#fff;border-radius:14px;padding:12px;border:1px dashed #E2D3CC}
+
+/* Finder */
+.prog{display:flex;gap:6px;margin-bottom:16px}
+.prog i{flex:1;height:5px;border-radius:3px;background:var(--line)}
+.prog i.on{background:var(--red)}
+.qtitle{font-size:20px;font-weight:700;margin-bottom:4px}
+.opt{display:flex;align-items:center;gap:12px;width:100%;text-align:left;background:#fff;border-radius:16px;padding:14px;margin-bottom:10px;
+  box-shadow:var(--shadow);border:2px solid transparent;font-size:14.5px;font-weight:600}
+.opt .ic{width:40px;height:40px;border-radius:12px;background:var(--red-soft);color:var(--maroon);display:flex;align-items:center;justify-content:center;font-size:19px}
+.opt small{display:block;font-weight:400;color:var(--muted);font-size:12px;margin-top:2px}
+.opt:hover{border-color:var(--red)}
+.amt{font-size:32px;font-weight:800;text-align:center;margin:26px 0 8px;color:var(--maroon)}
+input[type=range]{width:100%;accent-color:var(--red)}
+.rec{border:2px solid var(--red)}
+.rec .ribbon{display:inline-block;background:var(--red);color:#fff;font-size:11px;font-weight:700;padding:4px 9px;border-radius:6px;margin-bottom:10px}
+.rec h3{font-size:19px}
+.kv{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:14px 0}
+.kv div{background:var(--cream);border-radius:12px;padding:10px}
+.kv small{font-size:11px;color:var(--muted)}
+.kv b{display:block;font-size:14.5px;margin-top:2px}
+.docs li{font-size:13px;list-style:none;padding:5px 0;display:flex;gap:8px;align-items:center}
+.field{margin-bottom:12px}
+.field label{font-size:12.5px;font-weight:600;display:block;margin-bottom:6px}
+.field input{width:100%;height:46px;border-radius:12px;border:1px solid var(--line);padding:0 14px;font-size:14px;background:#fff;outline:none}
+.field input:focus{border-color:var(--red)}
+.cb{display:flex;gap:10px;font-size:12.5px;line-height:1.45;align-items:flex-start;margin:6px 0 16px}
+.cb input{width:18px;height:18px;accent-color:var(--red);margin-top:1px;flex:0 0 auto}
+.success{text-align:center;padding-top:40px}
+.success .ring{width:96px;height:96px;border-radius:50%;background:var(--green-soft);display:flex;align-items:center;justify-content:center;margin:0 auto 18px;animation:pop .4s ease}
+.success .ring div{width:64px;height:64px;border-radius:50%;background:var(--green);color:#fff;display:flex;align-items:center;justify-content:center}
+.success h2{font-size:22px;margin-bottom:8px}
+.success p{font-size:13.5px;color:var(--muted);line-height:1.5;margin-bottom:6px}
+
+/* Leaderboard */
+.lb{display:flex;align-items:center;gap:12px;padding:11px 0;border-bottom:1px solid var(--line)}
+.lb:last-child{border:0}
+.lb .rk{width:26px;font-weight:800;color:var(--muted);text-align:center}
+.lb.me{background:var(--red-soft);margin:0 -16px;padding:11px 16px;border-radius:0}
+.lb .v{margin-left:auto;font-weight:700;font-size:13.5px}
+.badges{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}
+.bdg{text-align:center;font-size:11px;line-height:1.3}
+.bdg .ic{width:52px;height:52px;border-radius:50%;margin:0 auto 6px;display:flex;align-items:center;justify-content:center;background:var(--gold-soft);color:var(--gold)}
+.bdg.lock .ic{background:#F1ECEA;color:#BFB1AD}
+.bdg.lock{color:var(--muted)}
+
+/* More */
+.list button{display:flex;align-items:center;gap:12px;width:100%;padding:14px 0;border-bottom:1px solid var(--line);font-size:14.5px;font-weight:500;text-align:left}
+.list button:last-child{border:0}
+.list .ic{width:36px;height:36px;border-radius:10px;background:var(--red-soft);color:var(--maroon);display:flex;align-items:center;justify-content:center}
+.list .chev{margin-left:auto;color:var(--muted)}
+
+/* Sheets, toast */
+.overlay{position:absolute;inset:0;background:rgba(42,26,30,.5);display:none;align-items:flex-end;z-index:30}
+.overlay.on{display:flex}
+.sheet2{background:var(--cream);width:100%;max-height:82%;overflow:auto;border-radius:26px 26px 0 0;padding:10px 16px 28px;animation:up .25s ease}
+@keyframes up{from{transform:translateY(40px);opacity:.5}to{transform:none;opacity:1}}
+.grab{width:40px;height:5px;border-radius:3px;background:#D9CAC4;margin:0 auto 14px}
+.sheet2 h3{font-size:17px;margin-bottom:12px}
+.notif{display:flex;gap:12px;background:#fff;border-radius:14px;padding:12px;margin-bottom:8px;box-shadow:var(--shadow)}
+.notif .ic{width:36px;height:36px;border-radius:10px;display:flex;align-items:center;justify-content:center;flex:0 0 auto}
+.notif h5{font-size:13.5px;margin-bottom:2px}
+.notif p{font-size:12px;color:var(--muted);line-height:1.4}
+.notif time{font-size:10.5px;color:#B3A39F;display:block;margin-top:4px}
+.slot{display:inline-block;padding:10px 14px;border-radius:12px;background:#fff;border:1px solid var(--line);font-size:13px;font-weight:600;margin:0 8px 8px 0}
+.slot.on{border-color:var(--red);background:var(--red-soft);color:var(--maroon)}
+.wa{background:#E7DDD3;border-radius:16px;padding:14px}
+.wa .bub{background:#DCF8C6;border-radius:12px 12px 4px 12px;padding:10px 12px;font-size:13px;line-height:1.5;margin-left:30px}
+.toast{position:absolute;left:16px;right:16px;bottom:96px;background:#2A1A1E;color:#fff;font-size:13px;padding:12px 14px;border-radius:14px;z-index:40;
+  opacity:0;transform:translateY(10px);transition:.25s;pointer-events:none;display:flex;gap:10px;align-items:center}
+.toast.on{opacity:1;transform:none}
+.concept{position:absolute;top:16px;left:68px;font-size:8.5px;font-weight:700;letter-spacing:.04em;color:var(--maroon);background:var(--red-soft);
+  padding:3px 7px;border-radius:6px;z-index:7;opacity:.85}
+
+@media (max-width:760px){
+  body{padding:0;gap:0;background:var(--cream)}
+  .presenter{display:none}
+  .device{width:100vw;height:100vh;height:100dvh;border:0;border-radius:0;box-shadow:none}
+  .status{display:none}
+  .screens{top:0}
+  .concept{display:none}
+}
+@media (max-height:900px) and (min-width:761px){
+  .device{transform:scale(.9);transform-origin:center}
+}
+</style>
+</head>
+<body>
+
+<aside class="presenter" id="presenter">
+  <span class="tag">Concept prototype · FAME 6.0 · PS4</span>
+  <h1>Saathi, the Digital RM</h1>
+  <p>A proactive, conversational layer on top of the existing connector app. Click a scene to jump to it while presenting or recording.</p>
+  <div id="scenes"></div>
+  <div class="row">
+    <button onclick="resetDemo()">Reset demo</button>
+    <button onclick="togglePersona()" id="personaBtn">Switch to new connector</button>
+  </div>
+  <div class="hint">Press <b>H</b> to hide this panel for clean screen recording. Dummy data only. Not an official bank app.</div>
+</aside>
+
+<div class="device" id="device">
+  <div class="status"><span>9:41</span><div class="notch"></div><div class="icons">
+    <svg width="18" height="12" viewBox="0 0 18 12"><rect x="0" y="8" width="3" height="4" rx="1" fill="#2A1A1E"/><rect x="5" y="5" width="3" height="7" rx="1" fill="#2A1A1E"/><rect x="10" y="2" width="3" height="10" rx="1" fill="#2A1A1E"/><rect x="15" y="0" width="3" height="12" rx="1" fill="#2A1A1E"/></svg>
+    <svg width="26" height="12" viewBox="0 0 26 12"><rect x=".5" y=".5" width="22" height="11" rx="3" fill="none" stroke="#2A1A1E"/><rect x="2" y="2" width="16" height="8" rx="2" fill="#2A1A1E"/><rect x="23.5" y="4" width="2" height="4" rx="1" fill="#2A1A1E"/></svg>
+  </div></div>
+  <div class="concept">CONCEPT</div>
+
+  <div class="screens">
+    <section class="screen" id="home"></section>
+    <section class="screen" id="chat">
+      <div class="chathead">
+        <button class="iconbtn" style="width:36px;height:36px" onclick="go('home')" aria-label="Back"><span data-i="back"></span></button>
+        <div class="avatar"><span data-i="spark"></span></div>
+        <div><h3>Saathi</h3><p id="chatSub">AI assistant · 24x7</p></div>
+        <div class="lang"><button id="lgEn" class="on" onclick="setLang('en')">EN</button><button id="lgHi" class="hi" onclick="setLang('hi')">हिं</button></div>
+        <button class="iconbtn" style="width:36px;height:36px" onclick="toggleSpeak()" id="spkBtn" aria-label="Voice replies"><span data-i="volOff"></span></button>
+      </div>
+      <div class="msgs" id="msgs"></div>
+      <div class="chips" id="chips"></div>
+      <div class="inputbar">
+        <input id="chatIn" placeholder="Type a message" onkeydown="if(event.key==='Enter')sendTyped()">
+        <button class="send" onclick="sendTyped()" aria-label="Send"><span data-i="send"></span></button>
+        <button class="bigmic" onclick="micDemo()" aria-label="Speak"><span data-i="mic"></span></button>
+      </div>
+      <div class="listen" id="listen"><div class="sheet">
+        <div class="muted small" id="listenLbl">Listening…</div>
+        <div class="wave"><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
+        <div class="heard" id="heard"></div>
+      </div></div>
+    </section>
+    <section class="screen" id="leads"></section>
+    <section class="screen full" id="lead"></section>
+    <section class="screen" id="earnings"></section>
+    <section class="screen" id="more"></section>
+    <section class="screen full" id="opps"></section>
+    <section class="screen full" id="finder"></section>
+    <section class="screen full" id="board"></section>
+  </div>
+
+  <nav class="nav" id="nav">
+    <button data-t="home" onclick="go('home')"><span data-i="home"></span>Home</button>
+    <button data-t="leads" onclick="go('leads')"><span data-i="list"></span>Leads</button>
+    <button class="mic" onclick="go('chat')" aria-label="Ask Saathi"><span data-i="mic"></span></button>
+    <button data-t="earnings" onclick="go('earnings')"><span data-i="wallet"></span>Earnings</button>
+    <button data-t="more" onclick="go('more')"><span data-i="grid"></span>More</button>
+  </nav>
+
+  <div class="overlay" id="overlay" onclick="if(event.target===this)closeSheet()"><div class="sheet2" id="sheet"></div></div>
+  <div class="toast" id="toast"></div>
+</div>
+
+<script>
+/* ---------- Icons ---------- */
+const I={
+ home:'<path d="M3 11l9-7 9 7v9a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"/>',
+ list:'<path d="M8 6h13M8 12h13M8 18h13"/><circle cx="3.5" cy="6" r="1"/><circle cx="3.5" cy="12" r="1"/><circle cx="3.5" cy="18" r="1"/>',
+ mic:'<rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/>',
+ wallet:'<rect x="3" y="6" width="18" height="14" rx="3"/><path d="M3 10h18M16 15h2"/>',
+ grid:'<rect x="4" y="4" width="6" height="6" rx="1.5"/><rect x="14" y="4" width="6" height="6" rx="1.5"/><rect x="4" y="14" width="6" height="6" rx="1.5"/><rect x="14" y="14" width="6" height="6" rx="1.5"/>',
+ bell:'<path d="M6 16V11a6 6 0 0 1 12 0v5l2 2H4z"/><path d="M10 20a2 2 0 0 0 4 0"/>',
+ back:'<path d="M15 5l-7 7 7 7"/>',
+ chev:'<path d="M9 5l7 7-7 7"/>',
+ phone:'<path d="M5 4h4l2 5-2.5 1.5a11 11 0 0 0 5 5L15 13l5 2v4a2 2 0 0 1-2 2A16 16 0 0 1 3 6a2 2 0 0 1 2-2z"/>',
+ cal:'<rect x="4" y="5" width="16" height="16" rx="2"/><path d="M4 10h16M9 3v4M15 3v4"/>',
+ send:'<path d="M4 12l16-8-6 16-2-7z"/>',
+ spark:'<path d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8z"/><path d="M19 16l.7 2 2 .7-2 .7-.7 2-.7-2-2-.7 2-.7z"/>',
+ trophy:'<path d="M8 4h8v5a4 4 0 0 1-8 0zM8 6H5a3 3 0 0 0 3 4M16 6h3a3 3 0 0 1-3 4M12 13v4M8 21h8M9 17h6"/>',
+ share:'<circle cx="18" cy="5" r="2.5"/><circle cx="6" cy="12" r="2.5"/><circle cx="18" cy="19" r="2.5"/><path d="M8.2 10.8l7.6-4.4M8.2 13.2l7.6 4.4"/>',
+ check:'<path d="M5 12l5 5 9-10"/>',
+ alert:'<path d="M12 3l10 18H2z"/><path d="M12 10v4M12 17.5v.5"/>',
+ x:'<path d="M6 6l12 12M18 6L6 18"/>',
+ vol:'<path d="M4 9h4l5-4v14l-5-4H4z"/><path d="M16 9a4 4 0 0 1 0 6M18.5 6.5a8 8 0 0 1 0 11"/>',
+ volOff:'<path d="M4 9h4l5-4v14l-5-4H4z"/><path d="M17 9l5 6M22 9l-5 6"/>',
+ search:'<circle cx="11" cy="11" r="6"/><path d="M20 20l-4.5-4.5"/>',
+ book:'<path d="M4 5a2 2 0 0 1 2-2h13v16H6a2 2 0 0 0-2 2z"/><path d="M4 19V5"/>',
+ plus:'<path d="M12 5v14M5 12h14"/>',
+ flame:'<path d="M12 3c1 4 5 5 5 10a5 5 0 0 1-10 0c0-3 2-4 2-7 1 1 2 2 3 4 1-2 0-5 0-7z"/>',
+ clock:'<circle cx="12" cy="12" r="8"/><path d="M12 8v4l3 2"/>',
+ users:'<circle cx="9" cy="8" r="3.5"/><path d="M2.5 20a6.5 6.5 0 0 1 13 0M16 4.5a3.5 3.5 0 0 1 0 7M18 14.5a6 6 0 0 1 3.5 5.5"/>',
+ store:'<path d="M4 9l1.5-5h13L20 9M4 9h16v11H4zM4 9a2.7 2.7 0 0 0 5.3 0 2.7 2.7 0 0 0 5.4 0A2.7 2.7 0 0 0 20 9M10 20v-5h4v5"/>',
+ home2:'<path d="M3 11l9-7 9 7M5 9.5V20h14V9.5M10 20v-5h4v5"/>',
+ card:'<rect x="3" y="6" width="18" height="13" rx="2"/><path d="M3 10h18M7 15h4"/>',
+ globe:'<circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18"/>',
+ user:'<circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/>',
+ shield:'<path d="M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6z"/><path d="M8.5 12l2.5 2.5 4.5-5"/>',
+ play:'<path d="M7 4l13 8-13 8z"/>'
+};
+function ic(n,s=20,sw=2){return `<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="${sw}" stroke-linecap="round" stroke-linejoin="round">${I[n]||''}</svg>`}
+function paintIcons(root=document){root.querySelectorAll('[data-i]').forEach(e=>{e.innerHTML=ic(e.dataset.i,e.dataset.s||20)})}
+const inr=n=>'₹'+Number(n).toLocaleString('en-IN');
+
+/* ---------- Dummy data ---------- */
+const STAGES=['Submitted','Documents','Credit check','Sanctioned','Disbursed'];
+let LEADS=[];
+function seedLeads(){LEADS=[
+ {id:1,name:'Anil Verma',product:'Personal Loan',amt:500000,stage:4,status:'disbursed',payout:12500,pay:'Approved',info:'Payout approved. ₹12,250 after 2% TDS reaches your account on Fri, 13 Nov.'},
+ {id:2,name:'Sunita Devi',product:'Business Loan',amt:800000,stage:1,status:'action',payout:20000,pay:'Expected',pending:'Last 3 months bank statement',info:'Waiting for 1 document from the customer.'},
+ {id:3,name:'Meena Agarwal',product:'Home Loan',amt:3500000,stage:2,status:'progress',payout:31500,pay:'Expected',info:'Credit team is reviewing the file. This usually takes 2 to 3 working days.'},
+ {id:4,name:'Rakesh Jain',product:'Credit Card',amt:0,stage:3,status:'progress',payout:1250,pay:'Expected',info:'Card approved. Payout is released once the customer activates the card.'},
+ {id:5,name:'Pooja Sahu',product:'Two Wheeler Loan',amt:120000,stage:4,status:'disbursed',payout:1200,pay:'Paid',info:'₹1,200 paid to your account on 6 Nov.'},
+ {id:6,name:'Vikas Yadav',product:'Car Loan',amt:600000,stage:2,status:'rejected',payout:0,pay:'-',info:"Did not meet the bank's credit criteria. Exact reasons are private to the customer."}
+]}
+seedLeads();
+const BOARD=[['Sanjay Kumar','Shop owner',42300],['Priya Nair','Insurance agent',36800],['Abdul Rehman','Car dealer',29150],['Kavita Singh','CA',22400],['Manoj Tiwari','Property broker',18900],['Deepak Verma','Loan agent',15200]];
+const NOTIFS=[
+ ['spark','p-red','2 new opportunities today','Festive stock loans for shop owners in your network.','8:30 am'],
+ ['wallet','p-green','Payout approved: ₹12,500','Anil Verma, Personal Loan. Arrives Friday, 13 Nov.','Yesterday'],
+ ['alert','p-amber','Sunita Devi needs 1 document','Bank statement pending for 2 days. Send a reminder?','Yesterday'],
+ ['trophy','p-gold',"You're ₹1,300 away from Gold",'Gold partners get +0.25% on every payout.','Mon'],
+ ['clock','p-blue','Admission season is coming','Parents start asking for education loans from January.','Sun']
+];
+
+/* ---------- State ---------- */
+const S={lang:'en',speak:false,newUser:false,leadTab:'all',finder:{},micIdx:0,chatStarted:false,bookedMeet:null,checklist:{intro:true,bank:false,lead:false,rm:false}};
+
+/* ---------- Router ---------- */
+const NAV_TABS=['home','leads','earnings','more'];
+function go(id,arg){
+  document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active'));
+  const el=document.getElementById(id); el.classList.add('active'); el.scrollTop=0;
+  document.getElementById('nav').classList.toggle('hide',!NAV_TABS.includes(id));
+  document.querySelectorAll('.nav [data-t]').forEach(b=>b.classList.toggle('on',b.dataset.t===id));
+  if(id==='home')renderHome();
+  if(id==='leads')renderLeads();
+  if(id==='lead')renderLead(arg);
+  if(id==='earnings')renderEarnings();
+  if(id==='more')renderMore();
+  if(id==='opps')renderOpps();
+  if(id==='finder'){if(arg!=='keep')S.finder={step:1};renderFinder()}
+  if(id==='board')renderBoard();
+  if(id==='chat')startChat();
+}
+
+/* ---------- Home ---------- */
+function renderHome(){
+  const h=document.getElementById('home');
+  const L=S.lang==='hi';
+  const hello=L?'<span class="hi">नमस्ते, रमेश जी</span>':'Namaste, Ramesh';
+  let body='';
+  if(S.newUser){
+    const c=S.checklist; const doneN=Object.values(c).filter(Boolean).length;
+    body=`
+    <div class="saathi">
+      <div class="lbl"><span class="dot">${ic('spark',15)}</span>Saathi · your Digital RM</div>
+      <h3>Welcome! Let's get your first earning in 7 days.</h3>
+      <div class="op"><span>${ic('wallet',18)}</span><span>Refer your first loan this week and get a <b>₹500 welcome bonus</b> on top of your payout.</span></div>
+      <div class="op"><span>${ic('users',18)}</span><span>Not sure where to start? Tell me what you do and I'll show you who in your circle may need a loan.</span></div>
+      <div class="acts"><button class="btn btn-white" onclick="go('finder')">Find my first lead</button><button class="btn" style="background:rgba(255,255,255,.15);color:#fff" onclick="go('chat')">Ask Saathi</button></div>
+    </div>
+    <div class="card">
+      <div class="tier head" style="display:flex;justify-content:space-between;align-items:center"><b style="font-size:14.5px">Your first week</b><span class="pill p-gold">Day 1 of 7 · ${doneN}/4 done</span></div>
+      <div class="tier"><div class="bar"><i style="width:${doneN*25}%"></i></div></div>
+      <ul class="check">
+        <li class="${c.intro?'done':''}"><span class="tick">${ic('check',13,3)}</span><span>Watch the 2-minute intro</span></li>
+        <li class="${c.bank?'done':''}"><span class="tick">${ic('check',13,3)}</span><span>Add bank account for payouts</span>${c.bank?'':'<button class="btn btn-ghost" style="padding:6px 10px;font-size:12px" onclick="doCheck(\'bank\')">Add</button>'}</li>
+        <li class="${c.rm?'done':''}"><span class="tick">${ic('check',13,3)}</span><span>Say hello to your RM, Rohit</span>${c.rm?'':'<button class="btn btn-ghost" style="padding:6px 10px;font-size:12px" onclick="openMeet()">Book</button>'}</li>
+        <li class="${c.lead?'done':''}"><span class="tick">${ic('check',13,3)}</span><span>Refer your first customer</span>${c.lead?'':'<button class="btn btn-ghost" style="padding:6px 10px;font-size:12px" onclick="go(\'finder\')">Start</button>'}</li>
+      </ul>
+    </div>
+    ${rmCard()}
+    <div class="sec">What can I earn?</div>
+    <div class="card">
+      <div class="erow"><div><h5>Personal Loan of ₹5 lakh</h5><p>Up to 2.5%</p></div><div class="amt">${inr(12500)}</div></div>
+      <div class="erow"><div><h5>Business Loan of ₹8 lakh</h5><p>Up to 2.5%</p></div><div class="amt">${inr(20000)}</div></div>
+      <div class="erow"><div><h5>Used Tractor Loan of ₹4 lakh</h5><p>Up to 3.5%</p></div><div class="amt">${inr(14000)}</div></div>
+      <div class="erow"><div><h5>Credit Card</h5><p>Per card activated</p></div><div class="amt">${inr(1250)}</div></div>
+    </div>`;
+  } else {
+    body=`
+    <div class="saathi">
+      <div class="lbl"><span class="dot">${ic('spark',15)}</span>Saathi · your Digital RM</div>
+      <h3>${L?'<span class="hi">सुप्रभात! आज आपके लिए 2 मौके हैं</span>':'Good morning! 2 opportunities for you today'}</h3>
+      <div class="op"><span>${ic('store',18)}</span><span><b>Diwali stock season.</b> Shop owners in your area need working capital. Business loan payout up to 2.5%.</span></div>
+      <div class="op"><span>${ic('card',18)}</span><span><b>Anil Verma</b> just got his personal loan. Offer a lifetime-free credit card and earn up to ₹1,250.</span></div>
+      <div class="acts"><button class="btn btn-white" onclick="go('opps')">Show me</button><button class="btn" style="background:rgba(255,255,255,.15);color:#fff" onclick="go('chat')">${ic('mic',16)} Ask Saathi</button></div>
+    </div>
+    <div class="stats">
+      <div class="stat"><small>Earned · Nov</small><div>${inr(13700)}</div></div>
+      <div class="stat"><small>Active leads</small><div>${LEADS.filter(l=>['action','progress'].includes(l.status)).length}</div></div>
+      <div class="stat"><small>Streak</small><div style="display:flex;align-items:center;gap:4px;color:var(--amber)">${ic('flame',17)}4 wk</div></div>
+    </div>
+    <div class="card tier" onclick="go('board')" style="cursor:pointer">
+      <div class="head"><b style="font-size:14.5px">Silver partner</b><span class="pill p-gold">${ic('trophy',12)} Gold at ${inr(15000)}/month</span></div>
+      <div class="bar"><i style="width:91%"></i></div>
+      <div class="small muted">Just <b style="color:var(--ink)">₹1,300 away</b> from Gold. Gold partners earn <b style="color:var(--ink)">+0.25%</b> on every payout.</div>
+    </div>
+    <div class="card alert">
+      <div class="ic p-amber">${ic('alert',18)}</div>
+      <div style="flex:1"><h4>Sunita Devi's loan needs 1 document</h4><p>Last 3 months bank statement. Pending for 2 days. Payout at stake: up to ${inr(20000)}.</p>
+      <div style="display:flex;gap:8px;margin-top:10px"><button class="btn btn-red" style="padding:8px 12px;font-size:12.5px" onclick="sendReminder()">Remind on WhatsApp</button><button class="btn btn-line" style="padding:8px 12px;font-size:12.5px" onclick="go('lead',2)">View</button></div></div>
+    </div>
+    ${rmCard()}
+    <div class="sec">Quick actions</div>
+    <div class="grid">
+      <button class="qa" onclick="go('finder')"><span class="ic">${ic('plus')}</span>Refer a customer</button>
+      <button class="qa" onclick="go('finder')"><span class="ic">${ic('search')}</span>Which loan fits?</button>
+      <button class="qa" onclick="go('leads')"><span class="ic">${ic('list')}</span>Track leads</button>
+      <button class="qa" onclick="go('opps')"><span class="ic">${ic('spark')}</span>Opportunities</button>
+      <button class="qa" onclick="shareSheet()"><span class="ic">${ic('share')}</span>Share on WhatsApp</button>
+      <button class="qa" onclick="go('board')"><span class="ic">${ic('trophy')}</span>Leaderboard</button>
+    </div>`;
+  }
+  h.innerHTML=`
+    <div class="top">
+      <div class="who"><div class="avatar">RS</div><div><h2>${hello}</h2><p>Property broker · Raipur</p></div></div>
+      <button class="iconbtn" onclick="openNotifs()" aria-label="Notifications">${ic('bell')}<span class="badge">${S.newUser?2:5}</span></button>
+    </div>${body}`;
+}
+function rmCard(){
+  const m=S.bookedMeet;
+  return `<div class="card">
+    <div class="rm"><div class="avatar">RS</div><div><h4>Rohit Sharma</h4><p>${m?`Your RM · meeting ${m}`:'Your RM · calls back in 10 min'}</p></div>
+    <div class="call"><button class="iconbtn" style="width:38px;height:38px;color:var(--green)" onclick="callRM()" aria-label="Call RM">${ic('phone',18)}</button>
+    <button class="iconbtn" style="width:38px;height:38px;color:var(--blue)" onclick="openMeet()" aria-label="Book meeting">${ic('cal',18)}</button></div></div>
+    <div class="small muted" style="margin-top:10px;line-height:1.45">Saathi handles your everyday questions 24x7. Rohit steps in for new customers, big tickets and anything tricky.</div>
+  </div>`;
+}
+function doCheck(k){S.checklist[k]=true;toast(k==='bank'?'Bank account added for payouts':'Done');renderHome()}
+
+/* ---------- Leads ---------- */
+const statusPill=l=>({disbursed:'<span class="pill p-green">Disbursed</span>',action:'<span class="pill p-amber">Action needed</span>',
+  progress:`<span class="pill p-blue">${STAGES[l.stage]}</span>`,rejected:'<span class="pill p-red">Not approved</span>',new:'<span class="pill p-blue">Submitted</span>'}[l.status]);
+function initials(n){return n.split(' ').map(x=>x[0]).join('').slice(0,2)}
+function renderLeads(){
+  const el=document.getElementById('leads');
+  const list=S.newUser?LEADS.filter(l=>l.mine):LEADS;
+  const tabs=[['all','All'],['action','Action needed'],['progress','In progress'],['disbursed','Disbursed'],['rejected','Not approved']];
+  const shown=list.filter(l=>S.leadTab==='all'||l.status===S.leadTab||(S.leadTab==='progress'&&l.status==='new'));
+  el.innerHTML=`<div class="top"><h2 style="font-size:20px">My leads</h2><button class="btn btn-red" style="padding:9px 14px" onclick="go('finder')">${ic('plus',16)} Refer</button></div>
+   ${list.length?`<div class="tabs">${tabs.map(t=>`<button class="${S.leadTab===t[0]?'on':''}" onclick="S.leadTab='${t[0]}';renderLeads()">${t[1]}</button>`).join('')}</div>`:''}
+   ${list.length===0?`<div class="card empty"><div class="ic">${ic('users',28)}</div><h4>No leads yet</h4><p>Your first referral earns a ₹500 welcome bonus. Saathi will update you at every step, so you never have to chase anyone.</p><button class="btn btn-red" onclick="go('finder')">Refer my first customer</button></div>`:
+   shown.map(l=>`<div class="card lead" onclick="go('lead',${l.id})"><div class="avatar">${initials(l.name)}</div>
+     <div><h4>${l.name}</h4><p>${l.product}${l.amt?' · '+inr(l.amt):''}</p></div>
+     <div class="right">${statusPill(l)}<div>${l.payout?inr(l.payout):'-'}</div></div></div>`).join('')||'<p class="muted small" style="text-align:center;padding:20px">Nothing here.</p>'}`;
+}
+function renderLead(id){
+  const l=LEADS.find(x=>x.id===id); const el=document.getElementById('lead');
+  const steps=STAGES.map((s,i)=>{
+    let cls='',sub='';
+    if(l.status==='rejected'&&i===l.stage){cls='fail';sub='Not approved by the credit team'}
+    else if(i<l.stage||(l.status==='disbursed'&&i<=l.stage)){cls='done'}
+    else if(i===l.stage){cls='now';sub=l.status==='action'?'Waiting for: '+l.pending:'In progress'}
+    const ico=cls==='done'?ic('check',13,3):cls==='fail'?ic('x',12,3):'';
+    return `<div class="step ${cls}"><div class="dotc">${ico}</div><div><h5>${s}</h5>${sub?`<p>${sub}</p>`:''}</div></div>`}).join('');
+  let action='';
+  if(l.status==='action')action=`<button class="btn btn-red btn-block" onclick="sendReminder()">${ic('send',16)} Send WhatsApp reminder to ${l.name.split(' ')[0]}</button>`;
+  if(l.status==='rejected')action=`<div class="card" style="background:var(--cream);box-shadow:none"><b style="font-size:13.5px">What you can do next</b><p class="small muted" style="margin-top:4px;line-height:1.5">Suggest a <b style="color:var(--ink)">Gold Loan</b> (payout up to 2%, quick and paperless), or ask him to reapply after 6 months.</p></div><button class="btn btn-ghost btn-block" onclick="go('finder')">Refer for Gold Loan</button>`;
+  if(l.status==='disbursed'&&l.product!=='Credit Card')action=`<div class="card alert" style="background:var(--gold-soft);box-shadow:none"><div class="ic" style="background:#fff;color:var(--gold)">${ic('card',18)}</div><div><h4>Cross-sell idea</h4><p>${l.name.split(' ')[0]} may also want a lifetime-free credit card. Earn up to ₹1,250.</p></div></div>`;
+  el.innerHTML=`<div class="back"><button onclick="go('leads')">${ic('back',18)}</button>Lead details</div>
+   <div class="card"><div class="lead" style="cursor:default"><div class="avatar">${initials(l.name)}</div><div><h4>${l.name}</h4><p>${l.product}${l.amt?' · '+inr(l.amt):''}</p></div><div class="right">${statusPill(l)}</div></div>
+   <div class="kv"><div><small>Your payout</small><b>${l.payout?inr(l.payout):'-'}</b></div><div><small>Payout status</small><b>${l.pay}</b></div></div>
+   <p class="small" style="line-height:1.5">${l.info}</p></div>
+   <div class="card"><b style="font-size:14px;display:block;margin-bottom:12px">Where is this loan?</b><div class="timeline">${steps}</div></div>
+   ${action}
+   <button class="btn btn-line btn-block" style="margin-top:10px" onclick="askLead(${l.id})">${ic('spark',16)} Ask Saathi about this lead</button>`;
+}
+
+/* ---------- Earnings ---------- */
+function renderEarnings(){
+  const el=document.getElementById('earnings');
+  if(S.newUser){el.innerHTML=`<div class="top"><h2 style="font-size:20px">My earnings</h2></div>
+    <div class="earnhero"><small>Earned in November</small><div class="big">₹0</div><div class="split"><div><small>Welcome bonus</small><b>₹500 waiting</b></div><div><small>Payout day</small><b>Every Friday</b></div></div></div>
+    <div class="card empty"><div class="ic">${ic('wallet',28)}</div><h4>Your first payout is one referral away</h4><p>Refer one personal loan of ₹5 lakh and you could earn up to ₹12,500, plus the ₹500 bonus.</p><button class="btn btn-red" onclick="go('finder')">Find a customer</button></div>`;return}
+  const months=[['Jun',6200],['Jul',9100],['Aug',11400],['Sep',15300],['Oct',21050],['Nov',13700]];
+  const max=22000;
+  el.innerHTML=`<div class="top"><h2 style="font-size:20px">My earnings</h2><span class="pill p-gold">${ic('trophy',12)} Silver</span></div>
+   <div class="earnhero"><small>Earned in November</small><div class="big">${inr(13700)}</div>
+   <div class="split"><div><small>In pipeline</small><b>${inr(52750)}</b></div><div><small>Paid so far</small><b>${inr(1200)}</b></div></div></div>
+   <div class="card next"><div class="ic">${ic('cal',20)}</div><div><b style="font-size:14px">Next payout: Fri, 13 Nov</b><div class="small muted">${inr(12250)} to bank account ending 4821</div></div></div>
+   <div class="card"><b style="font-size:14px">Last 6 months</b>
+     <div class="bars">${months.map((m,i)=>`<div class="${i===5?'cur':''}"><span style="color:var(--ink);font-weight:600">${(m[1]/1000).toFixed(1)}k</span><i style="height:${m[1]/max*70}px"></i><span>${m[0]}</span></div>`).join('')}</div></div>
+   <div class="card"><b style="font-size:14px">Payout by loan</b>
+     ${LEADS.filter(l=>l.payout).map(l=>`<div class="erow"><div class="avatar" style="width:36px;height:36px;font-size:12px">${initials(l.name)}</div><div><h5>${l.name}</h5><p>${l.product}${l.amt?` · ${inr(l.amt)}`:''}</p></div>
+     <div class="amt">${inr(l.payout)}<div style="margin-top:4px">${l.pay==='Paid'?'<span class="pill p-green">Paid</span>':l.pay==='Approved'?'<span class="pill p-blue">Approved</span>':'<span class="pill p-grey">Expected</span>'}</div></div></div>`).join('')}
+     <div class="small muted" style="margin-top:8px">Amounts shown before 2% TDS. Expected payouts depend on final sanction.</div></div>`;
+}
+
+/* ---------- More ---------- */
+function renderMore(){
+  document.getElementById('more').innerHTML=`<div class="top"><h2 style="font-size:20px">More</h2></div>
+  <div class="card list">
+    <button onclick="go('finder')"><span class="ic">${ic('search',18)}</span>Product finder<span class="chev">${ic('chev',18)}</span></button>
+    <button onclick="go('opps')"><span class="ic">${ic('spark',18)}</span>Opportunities for you<span class="chev">${ic('chev',18)}</span></button>
+    <button onclick="go('board')"><span class="ic">${ic('trophy',18)}</span>Leaderboard and rewards<span class="chev">${ic('chev',18)}</span></button>
+    <button onclick="shareSheet()"><span class="ic">${ic('share',18)}</span>Share creatives on WhatsApp<span class="chev">${ic('chev',18)}</span></button>
+    <button onclick="toast('2-minute product videos play here')"><span class="ic">${ic('play',18)}</span>Learn in 2 minutes<span class="chev">${ic('chev',18)}</span></button>
+  </div>
+  <div class="card list">
+    <button onclick="go('chat')"><span class="ic">${ic('globe',18)}</span>Language: ${S.lang==='hi'?'हिन्दी':'English'}<span class="chev">${ic('chev',18)}</span></button>
+    <button onclick="openMeet()"><span class="ic">${ic('cal',18)}</span>Meet my RM<span class="chev">${ic('chev',18)}</span></button>
+    <button onclick="toast('Profile and KYC details')"><span class="ic">${ic('user',18)}</span>Profile<span class="chev">${ic('chev',18)}</span></button>
+    <button onclick="privacySheet()"><span class="ic">${ic('shield',18)}</span>How Saathi uses your data<span class="chev">${ic('chev',18)}</span></button>
+  </div>
+  <p class="small muted" style="text-align:center;margin-top:8px">Concept prototype for FAME 6.0 · dummy data</p>`;
+}
+
+/* ---------- Opportunities ---------- */
+function renderOpps(){
+  document.getElementById('opps').innerHTML=`<div class="back"><button onclick="go('home')">${ic('back',18)}</button>Opportunities for you</div>
+  <p class="small muted" style="margin:-6px 2px 14px;line-height:1.5">Picked for a property broker in Raipur, based on the season and your past customers.</p>
+  <div class="card opp"><div class="tagline"><span class="pill p-red">Festive season</span><span class="pill p-grey">Oct to Nov</span></div>
+    <h4>Shop owners need stock finance before Diwali</h4><p>Business Loan, collateral free, ₹60,000 to ₹1 Cr. Payout up to 2.5%, so about ${inr(20000)} on an ₹8 lakh loan.</p>
+    <div class="acts"><button class="btn btn-red" onclick="shareSheet()">${ic('share',16)} Share on WhatsApp</button><button class="btn btn-ghost" onclick="S.finder={step:4,who:'shop',need:'business',amt:800000};go('finder','keep')">Refer now</button></div></div>
+  <div class="card opp"><div class="tagline"><span class="pill p-blue">From your work</span></div>
+    <h4>2 property deals you closed this month</h4><p>Buyers often need a home loan or a balance transfer. Home loan payout up to 0.9%, about ${inr(31500)} on ₹35 lakh.</p>
+    <div class="acts"><button class="btn btn-red" onclick="S.finder={step:4,who:'salaried',need:'home',amt:3500000};go('finder','keep')">Add a buyer</button></div></div>
+  <div class="card opp"><div class="tagline"><span class="pill p-gold">Cross-sell</span></div>
+    <h4>Anil Verma got his personal loan</h4><p>Offer a lifetime-free credit card. Fully digital, earn up to ₹1,250 when the card is activated.</p>
+    <div class="acts"><button class="btn btn-red" onclick="toast('Card link sent to Anil Verma on WhatsApp')">Send card link</button></div></div>
+  <div class="card opp"><div class="tagline"><span class="pill p-green">Coming up</span><span class="pill p-grey">Jan to Mar</span></div>
+    <h4>Admission season: education loans</h4><p>Parents in your circle start planning fees. Collateral-free up to ₹2 Cr, payout up to 1.25%.</p>
+    <div class="acts"><button class="btn btn-ghost" onclick="toast('Saathi will remind you on 2 January')">Remind me in January</button></div></div>
+  <div class="consent">${ic('shield',18)}<span>Saathi only uses customers you add yourself. It never reads your phone contacts, and every customer agrees before the bank contacts them.</span></div>`;
+}
+
+/* ---------- Product finder ---------- */
+const WHO=[['salaried','Salaried person','Job with monthly salary','👔'],['shop','Shop or business owner','Kirana, retail, trader, MSME','🏪'],['pro','Professional','Doctor, CA, architect','🩺'],['farmer','Farmer','Agriculture, rural income','🌾'],['student','Student or parent','Higher studies in India or abroad','🎓']];
+const NEED=[['personal','Personal needs','Wedding, medical, travel','💳'],['business','Grow the business','Stock, expansion, working capital','📈'],['home','Buy a home','New, resale or construction','🏠'],['vehicle','Buy a vehicle','Car, bike, tractor','🚗'],['education','Education','Fees, hostel, abroad','📚'],['gold','Against gold','Quick cash, small amounts','🪙'],['property','Against property','Big amount, low rate','🏢']];
+function recommend(f){
+  const a=f.amt;
+  if(f.need==='business'&&f.who!=='farmer')return{p:'Business Loan',rate:2.5,range:'₹60,000 to ₹1 Cr',why:'No collateral needed and quick for traders and MSMEs.',docs:['PAN and Aadhaar','12 months bank statement','GST or business proof']};
+  if(f.need==='home')return{p:'Home Loan',rate:0.9,range:'₹10 lakh to ₹10 Cr',why:'Long tenure up to 30 years keeps the EMI low.',docs:['PAN and Aadhaar','Income proof','Property papers']};
+  if(f.need==='vehicle'&&f.who==='farmer')return{p:'Used Tractor Loan',rate:3.5,range:'₹1 lakh to ₹5.5 lakh',why:'Highest payout in the app, built for rural customers.',docs:['PAN and Aadhaar','Land record or income proof','Tractor RC']};
+  if(f.need==='vehicle'&&a<=200000)return{p:'Two Wheeler Loan',rate:1,range:'₹30,000 to ₹10 lakh',why:'Fast approval for bikes and scooters.',docs:['PAN and Aadhaar','Address proof']};
+  if(f.need==='vehicle')return{p:'Car Loan',rate:2.75,range:'₹1 lakh to ₹2 Cr',why:'Works for new and pre-owned cars.',docs:['PAN and Aadhaar','Income proof','Car quotation']};
+  if(f.need==='education'||f.who==='student')return{p:'Education Loan',rate:1.25,range:'Up to ₹2 Cr',why:'Collateral free, tenure up to 15 years.',docs:['Admission letter','PAN and Aadhaar of student and parent','Fee structure']};
+  if(f.need==='gold')return{p:'Gold Loan',rate:2,range:'₹25,000 to ₹75 lakh',why:'Quick paperless disbursal, no credit history needed.',docs:['PAN and Aadhaar','Gold ornaments']};
+  if(f.need==='property')return{p:'Loan Against Property',rate:1.5,range:'₹10 lakh to ₹15 Cr',why:'Large amounts at lower interest, tenure up to 30 years.',docs:['PAN and Aadhaar','Property papers','Income proof']};
+  if(f.who==='farmer')return{p:'Gold Loan',rate:2,range:'₹25,000 to ₹75 lakh',why:'Quick cash without income documents.',docs:['PAN and Aadhaar','Gold ornaments']};
+  return{p:'Personal Loan',rate:2.5,range:'₹1 lakh to ₹1 Cr',why:'Fully paperless and disbursed fast.',docs:['PAN and Aadhaar','3 salary slips','3 months bank statement']};
+}
+function renderFinder(){
+  const f=S.finder,el=document.getElementById('finder');
+  const prog=n=>`<div class="prog">${[1,2,3,4].map(i=>`<i class="${i<=n?'on':''}"></i>`).join('')}</div>`;
+  const head=`<div class="back"><button onclick="${f.step>1&&f.step<5?'S.finder.step--;renderFinder()':"go('home')"}">${ic('back',18)}</button>${f.step>=5?'Refer a customer':'Which loan fits?'}</div>`;
+  if(f.step===1){el.innerHTML=head+prog(1)+`<div class="qtitle">Who is your customer?</div><p class="small muted" style="margin-bottom:16px">3 quick questions. No credit check, nothing is shared yet.</p>`+
+    WHO.map(w=>`<button class="opt" onclick="S.finder.who='${w[0]}';S.finder.step=2;renderFinder()"><span class="ic">${w[3]}</span><span>${w[1]}<small>${w[2]}</small></span></button>`).join('');return}
+  if(f.step===2){el.innerHTML=head+prog(2)+`<div class="qtitle">What do they need money for?</div><p class="small muted" style="margin-bottom:16px">Pick the closest one.</p>`+
+    NEED.map(w=>`<button class="opt" onclick="S.finder.need='${w[0]}';S.finder.step=3;S.finder.amt=S.finder.amt||500000;renderFinder()"><span class="ic">${w[3]}</span><span>${w[1]}<small>${w[2]}</small></span></button>`).join('');return}
+  if(f.step===3){el.innerHTML=head+prog(3)+`<div class="qtitle">Roughly how much?</div><p class="small muted">An estimate is fine.</p>
+    <div class="amt" id="amtV">${inr(f.amt)}</div>
+    <input type="range" min="50000" max="5000000" step="50000" value="${f.amt}" oninput="S.finder.amt=+this.value;document.getElementById('amtV').textContent=inr(this.value)">
+    <div style="display:flex;justify-content:space-between" class="small muted"><span>₹50k</span><span>₹50 lakh</span></div>
+    <button class="btn btn-red btn-block" style="margin-top:28px" onclick="S.finder.step=4;renderFinder()">Show best loan</button>`;return}
+  if(f.step===4){const r=recommend(f);f.rec=r;const pay=Math.round(f.amt*r.rate/100);
+    el.innerHTML=head+prog(4)+`<div class="card rec"><span class="ribbon">Best fit</span><h3>${r.p}</h3><p class="small muted" style="margin-top:4px;line-height:1.45">${r.why}</p>
+     <div class="kv"><div><small>You could earn</small><b style="color:var(--green)">up to ${inr(pay)}</b></div><div><small>Payout rate</small><b>up to ${r.rate}%</b></div><div><small>Loan range</small><b style="font-size:13px">${r.range}</b></div><div><small>Eligibility</small><b style="font-size:13px">Likely eligible*</b></div></div>
+     <b style="font-size:13px">Keep these ready</b><ul class="docs">${r.docs.map(d=>`<li>${ic('check',15,2.5)}${d}</li>`).join('')}</ul></div>
+     <div class="card alert" style="background:var(--gold-soft);box-shadow:none"><div class="ic" style="background:#fff;color:var(--gold)">${ic('card',18)}</div><div><h4>Also offer a credit card</h4><p>Most loan customers qualify. Earn up to ₹1,250 more.</p></div></div>
+     <button class="btn btn-red btn-block" onclick="S.finder.step=5;renderFinder()">Refer this customer</button>
+     <p class="small muted" style="margin-top:10px;line-height:1.45">*Indicative only, no impact on the customer's credit score. Final rate and approval are decided by the bank. Please don't promise a rate to the customer.</p>`;return}
+  if(f.step===5){el.innerHTML=head+`<div class="card" style="display:flex;justify-content:space-between;align-items:center"><div><small class="muted">Product</small><div style="font-weight:700">${f.rec.p}</div></div><div style="text-align:right"><small class="muted">Amount</small><div style="font-weight:700">${inr(f.amt)}</div></div></div>
+    <div class="field"><label>Customer name</label><input id="fName" placeholder="e.g. Mahesh Gupta" value=""></div>
+    <div class="field"><label>Mobile number</label><input id="fPhone" placeholder="10-digit mobile" inputmode="numeric" maxlength="10"></div>
+    <div class="field"><label>City</label><input id="fCity" value="Raipur"></div>
+    <label class="cb"><input type="checkbox" id="fOk"><span>The customer has agreed to be contacted by the bank about this loan.</span></label>
+    <button class="btn btn-red btn-block" onclick="submitLead()">Submit lead</button>`;return}
+  if(f.step===6){const pay=Math.round(f.amt*f.rec.rate/100);
+    el.innerHTML=`<div class="success"><div class="ring"><div>${ic('check',34,3)}</div></div><h2>Lead submitted!</h2>
+    <p>${f.name}'s ${f.rec.p.toLowerCase()} request is with the bank.</p>
+    <div class="card" style="text-align:left;margin-top:18px"><div class="erow"><div><h5>You could earn</h5><p>Once the loan is disbursed</p></div><div class="amt" style="color:var(--green)">up to ${inr(pay)}</div></div>
+    ${S.newUser?`<div class="erow"><div><h5>Welcome bonus</h5><p>First referral</p></div><div class="amt" style="color:var(--green)">+ ₹500</div></div>`:''}
+    <div class="erow"><div><h5>What happens next</h5><p>The bank calls ${f.name.split(' ')[0]} within 2 working hours. Saathi updates you at every step, here and on WhatsApp.</p></div></div></div>
+    <button class="btn btn-red btn-block" onclick="go('leads')">Track this lead</button>
+    <button class="btn btn-line btn-block" style="margin-top:10px" onclick="go('finder')">Refer another customer</button></div>`;}
+}
+function submitLead(){
+  const n=document.getElementById('fName').value.trim()||'Mahesh Gupta';
+  const p=document.getElementById('fPhone').value.trim();
+  if(!document.getElementById('fOk').checked){toast('Please confirm the customer agreed to be contacted');return}
+  if(p&&!/^\d{10}$/.test(p)){toast('Mobile number should have 10 digits');return}
+  const f=S.finder; f.name=n;
+  LEADS.unshift({id:Date.now(),name:n,product:f.rec.p,amt:f.amt,stage:0,status:'new',payout:Math.round(f.amt*f.rec.rate/100),pay:'Expected',info:'Submitted just now. The bank will call the customer within 2 working hours.',mine:true});
+  if(S.newUser)S.checklist.lead=true;
+  f.step=6;renderFinder();
+}
+
+/* ---------- Leaderboard ---------- */
+function renderBoard(){
+  const rows=[...BOARD.slice(0,6).map((b,i)=>[i+1,...b]),[7,'You (Ramesh)','Property broker',13700]];
+  document.getElementById('board').innerHTML=`<div class="back"><button onclick="go('home')">${ic('back',18)}</button>Leaderboard</div>
+  <div class="card tier"><div class="head"><b style="font-size:14.5px">Silver partner</b><span class="pill p-gold">${ic('trophy',12)} Next: Gold</span></div><div class="bar"><i style="width:91%"></i></div>
+   <div class="small muted">${inr(13700)} of ${inr(15000)} this month. Gold = <b style="color:var(--ink)">+0.25% on every payout</b> next month.</div></div>
+  <div class="card"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px"><b style="font-size:14px">Raipur district · November</b><span class="small muted">by earnings</span></div>
+   ${rows.map(r=>`<div class="lb ${r[0]===7?'me':''}"><span class="rk">${r[0]}</span><div class="avatar" style="width:36px;height:36px;font-size:12px">${r[1]==='You (Ramesh)'?'RS':initials(r[1])}</div><div><b style="font-size:13.5px">${r[1]}</b><div class="small muted">${r[2]}</div></div><span class="v">${inr(r[3])}</span></div>`).join('')}
+   <div class="small" style="margin-top:12px;background:var(--cream);padding:10px;border-radius:10px;line-height:1.45">One more personal loan puts you in the <b>top 5</b>. Top 3 each month get a <b>₹2,000 bonus</b> and a certificate from the bank.</div></div>
+  <div class="card"><b style="font-size:14px;display:block;margin-bottom:14px">Badges</b><div class="badges">
+   <div class="bdg"><div class="ic">${ic('check',22)}</div>First lead</div>
+   <div class="bdg"><div class="ic">${ic('flame',22)}</div>4-week streak</div>
+   <div class="bdg"><div class="ic">${ic('spark',22)}</div>Festive star</div>
+   <div class="bdg lock"><div class="ic">${ic('grid',22)}</div>3 products</div></div></div>`;
+}
+
+/* ---------- Chat ---------- */
+const T={
+ en:{
+  welcome:"Hi Ramesh, I'm Saathi, your Digital RM. Ask me about payouts, leads or which loan suits a customer. Type, or tap the mic and speak.",
+  sub:'AI assistant · 24x7', ph:'Type a message', listen:'Listening in English…',
+  chips:["When will my payout come?","What happened to Sunita's loan?","Which loan suits my customer?","Why was Vikas's loan rejected?","Where can I find leads?","Talk to my RM"],
+  payout:"Good news! Your payout of ₹12,500 for Anil Verma's personal loan is approved. ₹12,250 (after 2% TDS) reaches your account ending 4821 on Friday, 13 Nov.",
+  payCard:['Loan amount','Payout rate','Payout','TDS (2%)','You receive'],
+  status:"Sunita Devi's business loan is stuck at the document check. Just one thing is missing: her last 3 months' bank statement. Shall I send her a reminder on WhatsApp?",
+  statusOpts:['Send reminder','Call Rohit'],
+  reminded:"Done. I've sent Sunita Devi a reminder with an upload link. I'll tell you the moment she uploads it.",
+  product:"Sure. Who is your customer?", productOpts:['Salaried','Shop owner','Farmer','Student'],
+  rec:{
+   Salaried:"A Personal Loan fits best: ₹1 lakh to ₹1 Cr, fully paperless. On a ₹5 lakh loan you could earn up to ₹12,500.",
+   'Shop owner':"A Business Loan fits best, no collateral needed. Festive season is the right time for stock finance. On ₹8 lakh you could earn up to ₹20,000.",
+   Farmer:"A Used Tractor Loan fits best, ₹1 lakh to ₹5.5 lakh. It has the highest payout in the app, up to 3.5%. That's ₹14,000 on a ₹4 lakh loan.",
+   Student:"An Education Loan fits best, collateral free up to ₹2 Cr. On a ₹10 lakh loan you could earn up to ₹12,500."},
+  recNote:'Indicative. Final rate and approval are decided by the bank.', recOpts:['Refer now'],
+  reject:"Vikas Yadav's car loan wasn't approved because it didn't meet the bank's credit criteria. To protect his privacy I can't share the exact reason, but he can check his credit report for free and reapply after 6 months. Meanwhile, a gold loan may suit him (payout up to 2%).",
+  rejectOpts:['Refer for gold loan'],
+  opp:"Here are your 3 best opportunities this week: festive stock loans for shop owners, home loans for buyers from your property deals, and a credit card for Anil Verma.",
+  oppOpts:['Show all'],
+  rm:"Connecting you to your RM, Rohit Sharma. He'll call you within 10 minutes. Your request ID is CN-2041.",
+  rmCard:['Rohit Sharma','Your RM · calls back in 10 min'],
+  fallback:"I'm not sure about that yet. Shall I connect you to Rohit, your RM?", fallbackOpts:['Yes, connect me'],
+  mic:["When will my payout come?","What happened to Sunita's loan?","Which loan suits my customer?","Talk to my RM"]
+ },
+ hi:{
+  welcome:"नमस्ते रमेश जी, मैं साथी हूँ, आपका डिजिटल RM। पेआउट, लीड या ग्राहक के लिए सही लोन, कुछ भी पूछिए। लिखिए, या माइक दबाकर बोलिए।",
+  sub:'AI सहायक · 24x7', ph:'संदेश लिखें', listen:'हिंदी में सुन रहा हूँ…',
+  chips:["मेरा पेआउट कब आएगा?","सुनीता जी के लोन का क्या हुआ?","ग्राहक के लिए कौन सा लोन सही है?","विकास जी का लोन क्यों रिजेक्ट हुआ?","लीड कहाँ से मिलेगी?","RM से बात करनी है"],
+  payout:"अच्छी खबर! अनिल वर्मा जी के पर्सनल लोन का ₹12,500 पेआउट मंज़ूर हो गया है। 2% TDS कटने के बाद ₹12,250 शुक्रवार, 13 नवंबर को आपके खाते (4821) में आ जाएगा।",
+  payCard:['लोन राशि','पेआउट दर','पेआउट','TDS (2%)','आपको मिलेगा'],
+  status:"सुनीता देवी जी का बिज़नेस लोन डॉक्यूमेंट चेक पर रुका है। बस एक चीज़ बाकी है: पिछले 3 महीने का बैंक स्टेटमेंट। क्या मैं उन्हें WhatsApp पर याद दिला दूँ?",
+  statusOpts:['रिमाइंडर भेजें','रोहित को कॉल करें'],
+  reminded:"हो गया। सुनीता जी को अपलोड लिंक के साथ रिमाइंडर भेज दिया है। जैसे ही वो अपलोड करेंगी, मैं आपको बता दूँगा।",
+  product:"ज़रूर। आपका ग्राहक कौन है?", productOpts:['नौकरीपेशा','दुकानदार','किसान','विद्यार्थी'],
+  rec:{
+   'नौकरीपेशा':"पर्सनल लोन सबसे सही रहेगा: ₹1 लाख से ₹1 करोड़ तक, पूरी तरह पेपरलेस। ₹5 लाख के लोन पर आप ₹12,500 तक कमा सकते हैं।",
+   'दुकानदार':"बिज़नेस लोन सबसे सही रहेगा, कोई गिरवी नहीं चाहिए। त्योहार के सीज़न में स्टॉक के लिए यही सही समय है। ₹8 लाख पर आप ₹20,000 तक कमा सकते हैं।",
+   'किसान':"पुराने ट्रैक्टर का लोन सबसे सही रहेगा, ₹1 लाख से ₹5.5 लाख तक। इसमें ऐप का सबसे ज़्यादा पेआउट है, 3.5% तक। यानी ₹4 लाख पर ₹14,000।",
+   'विद्यार्थी':"एजुकेशन लोन सबसे सही रहेगा, ₹2 करोड़ तक बिना गिरवी। ₹10 लाख के लोन पर आप ₹12,500 तक कमा सकते हैं।"},
+  recNote:'अनुमानित। अंतिम ब्याज दर और मंज़ूरी बैंक तय करेगा।', recOpts:['अभी रेफ़र करें'],
+  reject:"विकास यादव जी का कार लोन बैंक के क्रेडिट नियमों पर खरा नहीं उतरा। उनकी निजता के लिए मैं सही कारण नहीं बता सकता, लेकिन वो अपनी क्रेडिट रिपोर्ट मुफ़्त में देखकर 6 महीने बाद दोबारा अप्लाई कर सकते हैं। तब तक गोल्ड लोन उनके लिए सही रह सकता है (2% तक पेआउट)।",
+  rejectOpts:['गोल्ड लोन के लिए रेफ़र करें'],
+  opp:"इस हफ़्ते आपके 3 सबसे अच्छे मौके: दुकानदारों के लिए त्योहार का स्टॉक लोन, आपकी प्रॉपर्टी डील के खरीदारों के लिए होम लोन, और अनिल वर्मा जी के लिए क्रेडिट कार्ड।",
+  oppOpts:['सभी देखें'],
+  rm:"आपको आपके RM रोहित शर्मा से जोड़ रहा हूँ। वो 10 मिनट में आपको कॉल करेंगे। आपकी रिक्वेस्ट ID है CN-2041।",
+  rmCard:['रोहित शर्मा','आपके RM · 10 मिनट में कॉल'],
+  fallback:"इस बारे में मुझे अभी पक्का नहीं पता। क्या मैं आपको आपके RM रोहित से जोड़ दूँ?", fallbackOpts:['हाँ, जोड़ दीजिए'],
+  mic:["मेरा पेआउट कब आएगा?","सुनीता जी के लोन का क्या हुआ?","दुकानदार के लिए कौन सा लोन सही है?","रोहित से बात करनी है"]
+ }
+};
+function t(){return T[S.lang]}
+function startChat(){
+  document.getElementById('chatSub').textContent=t().sub;
+  document.getElementById('chatIn').placeholder=t().ph;
+  renderChips();
+  if(!S.chatStarted){S.chatStarted=true;botSay(t().welcome)}
+}
+function renderChips(){document.getElementById('chips').innerHTML=t().chips.map(c=>`<button class="${S.lang==='hi'?'hi':''}" onclick="ask(this.textContent)">${c}</button>`).join('')}
+function setLang(l,silent){
+  S.lang=l;document.getElementById('lgEn').classList.toggle('on',l==='en');document.getElementById('lgHi').classList.toggle('on',l==='hi');
+  document.getElementById('chatSub').textContent=t().sub;document.getElementById('chatIn').placeholder=t().ph;renderChips();
+  if(!silent)botSay(l==='hi'?'ठीक है, अब मैं हिंदी में बात करूँगा।':"Okay, I'll talk in English now.");
+}
+function toggleSpeak(){S.speak=!S.speak;document.getElementById('spkBtn').innerHTML=ic(S.speak?'vol':'volOff');toast(S.speak?'Saathi will speak replies aloud':'Voice replies off');if(!S.speak&&window.speechSynthesis)speechSynthesis.cancel()}
+function speak(text){
+  if(!S.speak||!window.speechSynthesis)return;
+  const u=new SpeechSynthesisUtterance(text.replace(/<[^>]+>/g,''));u.lang=S.lang==='hi'?'hi-IN':'en-IN';
+  const v=speechSynthesis.getVoices().find(v=>v.lang===u.lang)||speechSynthesis.getVoices().find(v=>v.lang.startsWith(S.lang));if(v)u.voice=v;
+  u.rate=1;speechSynthesis.cancel();speechSynthesis.speak(u);
+}
+function addMsg(html,who){
+  const m=document.createElement('div');m.className='msg '+who+(S.lang==='hi'?' hi':'');m.innerHTML=html;
+  const box=document.getElementById('msgs');box.appendChild(m);box.scrollTop=box.scrollHeight;return m;
+}
+function botSay(text,extra='',opts=null){
+  const box=document.getElementById('msgs');
+  const ty=document.createElement('div');ty.className='msg bot';ty.innerHTML='<div class="typing"><i></i><i></i><i></i></div>';ty.style.padding='0';
+  box.appendChild(ty);box.scrollTop=box.scrollHeight;
+  setTimeout(()=>{ty.remove();
+    let o='';if(opts)o=`<div class="opts">${opts.map(x=>`<button onclick="optClick(this.textContent)">${x}</button>`).join('')}</div>`;
+    addMsg(text+extra+o,'bot');speak(text);
+  },700);
+}
+function ask(q){if(!q)return;addMsg(q.replace(/</g,'&lt;'),'me');setTimeout(()=>reply(q),250)}
+function sendTyped(){const i=document.getElementById('chatIn');const v=i.value.trim();if(!v)return;i.value='';ask(v)}
+function has(q,arr){return arr.some(k=>k instanceof RegExp?k.test(q):q.includes(k))}
+function reply(q){
+  const s=q.toLowerCase(),x=t();
+  if(has(s,[/\brm\b/,'rohit','talk to','human','person','रोहित','बात कर','connect','जोड़'])){
+    botSay(x.rm,`<div class="mini" style="display:flex;align-items:center;gap:10px"><div class="avatar" style="width:38px;height:38px;font-size:13px;background:#E9EEF6;color:var(--blue)">RS</div><div><b>${x.rmCard[0]}</b><div class="small muted">${x.rmCard[1]}</div></div><span style="margin-left:auto;color:var(--green)">${ic('phone',18)}</span></div>`);return}
+  if(has(s,['reject','vikas','रिजेक्ट','विकास','क्यों'])){botSay(x.reject,`<span class="note">${x.recNote}</span>`,x.rejectOpts);return}
+  if(has(s,['sunita','stuck','सुनीता','रुका'])){botSay(x.status,'',x.statusOpts);return}
+  const hit=LEADS.find(l=>s.includes(l.name.split(' ')[0].toLowerCase()));
+  if(hit){leadReply(hit);return}
+  if(has(s,['payout','payment','paisa','money','earning','पेआउट','पैसा','कमाई','पैसे'])){
+    const c=x.payCard;botSay(x.payout,`<div class="mini"><div class="r"><span>${c[0]}</span><b>₹5,00,000</b></div><div class="r"><span>${c[1]}</span><b>2.5%</b></div><div class="r"><span>${c[2]}</span><b>₹12,500</b></div><div class="r"><span>${c[3]}</span><b>- ₹250</b></div><div class="r t"><span>${c[4]}</span><span style="color:var(--green)">₹12,250</span></div></div>`);return}
+  if(has(s,['which loan','suit','product','best loan','कौन सा','सही है','सही रहेगा'])){
+    const direct=x.productOpts.find(o=>s.includes(o.toLowerCase())||(o==='Shop owner'&&s.includes('shop'))||(o==='दुकानदार'&&s.includes('दुकान')));
+    if(direct){optClick(direct,true);return}
+    botSay(x.product,'',x.productOpts);return}
+  if(has(s,['lead','opportunit','customer','मौके','लीड','ग्राहक'])){botSay(x.opp,'',x.oppOpts);return}
+  if(has(s,['hello','hi','namaste','नमस्ते'])){botSay(x.welcome);return}
+  botSay(x.fallback,'',x.fallbackOpts);
+}
+const STAGES_HI=['जमा हुआ','डॉक्यूमेंट','क्रेडिट जाँच','मंज़ूर','पैसा जारी'];
+function leadReply(l){
+  if(l.id===2){botSay(t().status,'',t().statusOpts);return}
+  if(l.id===6){botSay(t().reject,`<span class="note">${t().recNote}</span>`,t().rejectOpts);return}
+  if(S.lang==='hi'){
+    let m=`${l.name} जी का ${l.product} अभी "${STAGES_HI[l.stage]}" चरण पर है।`;
+    if(l.pay==='Paid')m+=` आपका ${inr(l.payout)} पेआउट खाते में आ चुका है।`;
+    else if(l.pay==='Approved')m+=` आपका ${inr(l.payout)} पेआउट मंज़ूर है, शुक्रवार को खाते में आएगा।`;
+    else if(l.status==='new')m+=' बैंक 2 घंटे में ग्राहक को कॉल करेगा। हर कदम पर मैं आपको बताऊँगा।';
+    else m+=` पैसा जारी होने पर आपको ${inr(l.payout)} तक मिलेगा।`;
+    botSay(m);return}
+  botSay(`${l.name}'s ${l.product.toLowerCase()} is at the "${STAGES[l.stage]}" stage. ${l.info}`);
+}
+function askLead(id){
+  const l=LEADS.find(x=>x.id===id),f=l.name.split(' ')[0];
+  go('chat');
+  setTimeout(()=>{addMsg(S.lang==='hi'?`${f} जी के लोन का क्या हुआ?`:`What happened to ${f}'s loan?`,'me');setTimeout(()=>leadReply(l),250)},400);
+}
+function optClick(o,silent){
+  const x=t();
+  if(!silent)addMsg(o,'me');
+  setTimeout(()=>{
+    if(x.rec[o]){botSay(x.rec[o],`<span class="note">${x.recNote}</span>`,x.recOpts);return}
+    if(o===x.statusOpts[0]){botSay(x.reminded);return}
+    if(o===x.statusOpts[1]||o===x.fallbackOpts[0]){reply('rohit');return}
+    if(o===x.recOpts[0]){go('finder');return}
+    if(o===x.rejectOpts[0]){S.finder={step:4,who:'salaried',need:'gold',amt:200000};go('finder','keep');return}
+    if(o===x.oppOpts[0]){go('opps');return}
+  },silent?0:250);
+}
+function micDemo(){
+  const q=t().mic[S.micIdx%t().mic.length];S.micIdx++;
+  const L=document.getElementById('listen'),H=document.getElementById('heard');
+  document.getElementById('listenLbl').textContent=t().listen;H.textContent='';H.className='heard'+(S.lang==='hi'?' hi':'');
+  L.classList.add('on');
+  const words=q.split(' ');let i=0;
+  setTimeout(()=>{const iv=setInterval(()=>{H.textContent=words.slice(0,++i).join(' ');if(i>=words.length){clearInterval(iv);setTimeout(()=>{L.classList.remove('on');ask(q)},600)}},220)},700);
+}
+
+/* ---------- Sheets & helpers ---------- */
+function openSheet(html){document.getElementById('sheet').innerHTML='<div class="grab"></div>'+html;document.getElementById('overlay').classList.add('on')}
+function closeSheet(){document.getElementById('overlay').classList.remove('on')}
+function openNotifs(){openSheet(`<h3>Updates from Saathi</h3>`+NOTIFS.slice(0,S.newUser?2:5).map((n,i)=>S.newUser&&i===0?
+  `<div class="notif"><div class="ic p-red">${ic('spark',18)}</div><div><h5>Welcome to the partner program</h5><p>Refer your first customer in 7 days and get a ₹500 bonus.</p><time>Just now</time></div></div>`:
+  S.newUser&&i===1?`<div class="notif"><div class="ic p-blue">${ic('cal',18)}</div><div><h5>Meet your RM, Rohit</h5><p>Book a 15-minute call to get started.</p><time>Just now</time></div></div>`:
+  `<div class="notif"><div class="ic ${n[1]}">${ic(n[0],18)}</div><div><h5>${n[2]}</h5><p>${n[3]}</p><time>${n[4]}</time></div></div>`).join(''))}
+function openMeet(){
+  const slots=['Tue 10 Nov · 11:00 am','Tue 10 Nov · 4:00 pm','Wed 11 Nov · 12:30 pm','Thu 12 Nov · 6:30 pm'];
+  openSheet(`<h3>Meet Rohit, your RM</h3><p class="small muted" style="margin:-6px 0 14px;line-height:1.5">Visit, phone or video call. Pick a time that suits you, including evenings.</p>
+  <div>${slots.map(s=>`<button class="slot" onclick="document.querySelectorAll('.slot').forEach(x=>x.classList.remove('on'));this.classList.add('on');S._slot='${s}'">${s}</button>`).join('')}</div>
+  <button class="btn btn-red btn-block" style="margin-top:10px" onclick="if(!S._slot){toast('Pick a time first');return}S.bookedMeet=S._slot;S.checklist.rm=true;closeSheet();toast('Meeting booked with Rohit: '+S._slot);renderHome()">Book meeting</button>`)}
+function shareSheet(){openSheet(`<h3>Share on WhatsApp</h3><p class="small muted" style="margin:-6px 0 12px">Ready-made message in your language, with your referral link.</p>
+  <div class="wa"><div class="bub">🪔 <b>Diwali ke liye stock bharna hai?</b><br>IDFC FIRST Bank Business Loan: bina guarantee, ₹60,000 se ₹1 crore tak, jaldi approval.<br><br>Details ke liye mujhe call karein: Ramesh, 98xxx xxx21<br><span style="color:#3A7BD5">(your referral link)</span></div></div>
+  <div style="display:flex;gap:8px;margin-top:14px"><button class="btn btn-ghost" style="flex:1" onclick="toast('Switched creative to English')">English</button><button class="btn btn-red" style="flex:2" onclick="closeSheet();toast('Shared to 3 WhatsApp groups')">${ic('share',16)} Share</button></div>`)}
+function privacySheet(){openSheet(`<h3>How Saathi uses your data</h3>
+  <div class="notif"><div class="ic p-green">${ic('shield',18)}</div><div><h5>Only what you add</h5><p>Saathi never reads your phone contacts or messages.</p></div></div>
+  <div class="notif"><div class="ic p-green">${ic('users',18)}</div><div><h5>Customer consent first</h5><p>Every customer agrees before the bank contacts them.</p></div></div>
+  <div class="notif"><div class="ic p-green">${ic('spark',18)}</div><div><h5>Clearly an AI assistant</h5><p>Saathi says it is an AI, never promises rates or approvals, and hands over to your RM when needed.</p></div></div>`)}
+function callRM(){toast('Calling Rohit Sharma…')}
+function sendReminder(){toast('Reminder sent to Sunita Devi with an upload link')}
+let tt;function toast(m){const e=document.getElementById('toast');e.innerHTML=ic('check',16,2.5)+'<span>'+m+'</span>';e.classList.add('on');clearTimeout(tt);tt=setTimeout(()=>e.classList.remove('on'),2300)}
+
+/* ---------- Presenter ---------- */
+const SCENES=[
+ ['Proactive home','Daily nudges, tier progress, stuck lead',()=>{go('home')}],
+ ['Voice in Hindi: payout','Mic → Saathi answers in Hindi',()=>{resetChat();setLang('hi',true);go('chat');S.micIdx=0;setTimeout(micDemo,1200)}],
+ ['Stuck lead, one tap fix','Why it is stuck and what to do',()=>{go('lead',2)}],
+ ['Which loan fits?','3 questions → best product + payout',()=>{go('finder')}],
+ ['Earnings you can trust','Per-loan payout, next payout date',()=>{go('earnings')}],
+ ['Opportunities','Seasonal, profession and cross-sell',()=>{go('opps')}],
+ ['Hand over to a human','Saathi connects the RM in 10 min',()=>{resetChat();setLang('en',true);go('chat');setTimeout(()=>ask('Talk to my RM'),1200)}],
+ ['Leaderboard and tiers','Recognition tied to money',()=>{go('board')}],
+ ['New connector, day 1','First-week activation journey',()=>{if(!S.newUser)togglePersona();go('home')}]
+];
+document.getElementById('scenes').innerHTML=SCENES.map((s,i)=>`<button class="scene" onclick="SCENES[${i}][2]()"><b>${i+1}</b><span>${s[0]}<small>${s[1]}</small></span></button>`).join('');
+function resetChat(){S.chatStarted=false;document.getElementById('msgs').innerHTML=''}
+function togglePersona(){S.newUser=!S.newUser;if(S.newUser){S.checklist={intro:true,bank:false,lead:false,rm:false};S.bookedMeet=null}document.getElementById('personaBtn').textContent=S.newUser?'Switch to active connector':'Switch to new connector';S.leadTab='all';go('home')}
+function resetDemo(){S.lang='en';S.speak=false;S.newUser=false;S.bookedMeet=null;S.checklist={intro:true,bank:false,lead:false,rm:false};S.leadTab='all';
+  seedLeads();resetChat();document.getElementById('lgEn').classList.add('on');document.getElementById('lgHi').classList.remove('on');
+  document.getElementById('spkBtn').innerHTML=ic('volOff');document.getElementById('personaBtn').textContent='Switch to new connector';go('home')}
+document.addEventListener('keydown',e=>{if((e.key==='h'||e.key==='H')&&document.activeElement.tagName!=='INPUT'){const p=document.getElementById('presenter');p.style.display=p.style.display==='none'?'':'none'}});
+
+paintIcons();
+go('home');
+</script>
+</body>
+</html>
